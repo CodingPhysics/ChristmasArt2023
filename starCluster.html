@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+  <title>Star cluster: Algorithmic art with vanilla JavaScript</title>
+  <meta name="author" content="Markus Michelmann">
+  <style>html,body{margin:0;}</style>
+</html>
+<body>
+  <canvas id="cnv" width="1000" height="1500"></canvas>
+  <script>
+    let cnv, ctx, Nverts = 6, Ngens = 7, TAU = 2*Math.PI, e = 1e-10;
+    const sum = (...a) => [...a].reduce((s,x) => [s[0]+x[0], s[1]+x[1]], [0,0]),
+          sub = (a, b) => [a[0] - b[0], a[1] - b[1]],
+          mul = (a, b) => [a[0]*b[0] - a[1]*b[1], a[0]*b[1] + a[1]*b[0]],
+          dot = (a, b) => a.length ? a[0]*b[0] + a[1]*b[1] : [a*b[0], a*b[1]], 
+          det = (a, b) => a[0]*b[1] - a[1]*b[0],
+          vec = (r, w) => [r * Math.cos(w), r * Math.sin(w)],
+          dist = (a, b) => Math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2);    
+
+    window.onload = () =>
+      { cnv=document.getElementById("cnv"), ctx=cnv.getContext("2d"), draw(); }
+    window.addEventListener('resize', draw );
+
+    function crossing(A, B, C, D){ // Intersection of 2 line segments
+      let AB = sub(B,A), AC = sub(C,A), DC = sub(C,D), d = det(AB,DC), q = 1/d;  
+      let t = q*det(AC,DC), u = q*det(AB,AC), r = sum(A, dot(t, AB));
+      return (Math.min(Math.abs(d),t,u) > e && Math.max(t,u) < 1-e) ? r : null;
+    }
+    function Star(A, B, n){ // Regular star polygon object
+      let i, u = sub(B,A), r = vec(1,TAU/n), l = 2*n, v = this.verts = [A,,B];
+      for(i = 4; i < l; i += 2) v[i] = sum(v[i-2], u = mul(r, u));
+      for(i = 1; i < l; i += 2) 
+        v[i] = crossing(v[(i+l-3)%l], v[(i+1)%l], v[(i+l-1)%l], v[(i+3)%l]);
+      this.ctr = dot(1/l, sum(...v));
+      this.ro = dist(this.ctr, v[0]), this.ri = dist(this.ctr, v[1]);
+    } 
+    Star.prototype.draw = function(){ // Draw function
+      let v = this.verts.at(-1), c = this.ctr, ri = this.ri,
+          g = ctx.createRadialGradient(...c, ri/10, ...c, ri);
+      g.addColorStop(0,'#ffa'), g.addColorStop(1,'#fb0'), ctx.fillStyle = g;
+      ctx.beginPath(), ctx.moveTo(...v);
+      for(v of this.verts) ctx.lineTo(...v);
+      ctx.fill(), ctx.closePath();
+    } 
+    Star.prototype.overlaps = function(o){ // Intersection test for stars
+      let v = this.verts, u = o.verts, ri = this.ri, ro = this.ro,
+          d = dist(this.ctr, o.ctr), di = ri + o.ri;
+      if(d < di || d > ro + o.ro) return d < di;
+      for(let i = 0; i < u.length; i += 2)
+        for(let j = 0; j < v.length; j += 2) 
+          if(crossing(u[i], u.at(i-4), v[j], v.at(j-4))) return true;
+      return false;
+    } 
+    Star.prototype.expand = function(starList){ // Adds touching stars
+      let v = this.verts, l = v.length, nxt, s;
+      loop: for(let i = 0; i < l; i += 2){
+        nxt = new Star(v[i], v.at(i-1), l/2);
+        for(s of starList) if(s.overlaps(nxt)) continue loop;
+        starList.push(nxt); 
+      }
+    }
+    function draw(){ // Main function
+      let w = cnv.width=window.innerWidth, h = cnv.height=window.innerHeight,
+          l=Math.min(w,h), a=l/(1.9*Nverts), A=[w/2-a,h/2-l/6], 
+          B=sum(A,[2*a,0]), stars = [new Star(A, B, Nverts)];
+      for(let i = 1; i < Ngens; i++) for(let s of [...stars]) s.expand(stars);
+      ctx.fillStyle = '#005', ctx.fillRect(0, 0, w, h);
+      for(let s of stars) s.draw();
+    }
+  </script>
+</body>
